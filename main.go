@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,7 +28,7 @@ func main() {
 	}
 
 	// Construct the URL and request body
-	url := fmt.Sprintf("%s/-/user/org.couchdb.user:%s", *registry, *username)
+	requestURL := fmt.Sprintf("%s/-/user/org.couchdb.user:%s", *registry, *username)
 	body := map[string]string{
 		"name":     *username,
 		"password": *password,
@@ -39,7 +40,7 @@ func main() {
 	}
 
 	// Send the PUT request
-	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequest("PUT", requestURL, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		fmt.Printf("Error creating request: %v\n", err)
 		os.Exit(1)
@@ -80,14 +81,24 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Parse the registry URL to strip the scheme
+	parsedURL, err := url.Parse(*registry)
+	if err != nil {
+		fmt.Printf("Error parsing registry URL: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Use the host part of the URL for the .npmrc entry
+	registryHost := parsedURL.Host
+
+	// Update the .npmrc file
+	npmrcEntry := fmt.Sprintf("//%s/:_authToken=%s", registryHost, token)
+
 	// Determine the actual path to the .npmrc file
 	npmrcFilePath := *npmrcPath
 	if stat, err := os.Stat(*npmrcPath); err == nil && stat.IsDir() {
 		npmrcFilePath = filepath.Join(*npmrcPath, ".npmrc")
 	}
-
-	// Update the .npmrc file
-	npmrcEntry := fmt.Sprintf("//%s/:_authToken=%s", *registry, token)
 
 	// Read the existing .npmrc file
 	npmrcContent, err := os.ReadFile(npmrcFilePath)
@@ -102,7 +113,7 @@ func main() {
 
 	// Check if the entry already exists and update it
 	for i, line := range lines {
-		if strings.HasPrefix(line, fmt.Sprintf("//%s/:_authToken=", *registry)) {
+		if strings.HasPrefix(line, fmt.Sprintf("//%s/:_authToken=", registryHost)) {
 			lines[i] = npmrcEntry
 			entryExists = true
 			break
