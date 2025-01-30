@@ -19,6 +19,7 @@ func main() {
 	username := flag.String("username", "", "Username")
 	password := flag.String("password", "", "Password")
 	npmrcPath := flag.String("npmrc", filepath.Join(os.Getenv("HOME"), ".npmrc"), "Path to .npmrc file or directory")
+	useRegistry := flag.Bool("use", false, "Set the registry=... key in the .npmrc file")
 	flag.Parse()
 
 	// Validate required flags
@@ -110,19 +111,27 @@ func main() {
 	// Convert the content to a string and split by lines
 	lines := strings.Split(string(npmrcContent), "\n")
 	entryExists := false
+	registryEntry := fmt.Sprintf("registry=%s", *registry)
 
 	// Check if the entry already exists and update it
 	for i, line := range lines {
 		if strings.HasPrefix(line, fmt.Sprintf("//%s/:_authToken=", registryHost)) {
 			lines[i] = npmrcEntry
 			entryExists = true
-			break
+		}
+		if *useRegistry && strings.HasPrefix(line, "registry=") {
+			lines[i] = registryEntry
 		}
 	}
 
-	// If the entry does not exist, append it
+	// If the auth entry does not exist, append it
 	if !entryExists {
 		lines = append(lines, npmrcEntry)
+	}
+
+	// If the --use flag is set and no registry entry exists, append it
+	if *useRegistry && !strings.Contains(strings.Join(lines, "\n"), registryEntry) {
+		lines = append(lines, registryEntry)
 	}
 
 	// Write the updated content back to the .npmrc file
